@@ -3,7 +3,7 @@ name: publish
 on:
   schedule:
     # Moscow 09:00-11:00 window (morning posts) and 18:00-20:00 (evening 19:00)
-    - cron: '*/30 6-7,15-17 * * *'
+    - cron: '*/15 6-7,15-17 * * *'
   workflow_dispatch:
 
 concurrency:
@@ -32,4 +32,4 @@ jobs:
           git config user.name "luna-bot"
           git config user.email "actions@users.noreply.github.com"
           git add ig-queue.json
-          git diff --cached --quiet || { git commit -m "mark published"; git push; }
+          git diff --cached --quiet || { git commit -m "mark published"; git pull --rebase; git push; }

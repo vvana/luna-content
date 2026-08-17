@@ -45,6 +45,22 @@ def api(method: str, path: str, **params) -> dict:
     return data
 
 
+def create_container(**params) -> str:
+    """POST /media with retries: raw.githubusercontent sometimes serves a
+    transient error page instead of the image, and Meta then rejects the
+    media type. Safe to retry - containers are not published yet."""
+    last = None
+    for attempt in range(3):
+        if attempt:
+            time.sleep(30)
+        try:
+            return api("POST", f"{IG_ID}/media", **params)["id"]
+        except RuntimeError as e:
+            last = e
+            print(f"  container attempt {attempt + 1} failed: {e}")
+    raise last
+
+
 def wait_ready(container_id: str, tries: int = 40):
     """Poll a media container until Meta finishes processing it."""
     for _ in range(tries):
@@ -62,11 +78,10 @@ def raw_url(repo_path: str) -> str:
 
 
 def publish_reel(item: dict) -> str:
-    container = api("POST", f"{IG_ID}/media",
-                    media_type="REELS",
-                    video_url=raw_url(item["file"]),
-                    caption=item.get("caption", ""),
-                    share_to_feed="true")["id"]
+    container = create_container(media_type="REELS",
+                                 video_url=raw_url(item["file"]),
+                                 caption=item.get("caption", ""),
+                                 share_to_feed="true")
     wait_ready(container)
     return api("POST", f"{IG_ID}/media_publish", creation_id=container)["id"]
 
@@ -74,15 +89,13 @@ def publish_reel(item: dict) -> str:
 def publish_carousel(item: dict) -> str:
     children = []
     for f in item["files"]:
-        children.append(api("POST", f"{IG_ID}/media",
-                            image_url=raw_url(f),
-                            is_carousel_item="true")["id"])
+        children.append(create_container(image_url=raw_url(f),
+                                         is_carousel_item="true"))
     for cid in children:
         wait_ready(cid, tries=12)
-    container = api("POST", f"{IG_ID}/media",
-                    media_type="CAROUSEL",
-                    children=",".join(children),
-                    caption=item.get("caption", ""))["id"]
+    container = create_container(media_type="CAROUSEL",
+                                 children=",".join(children),
+                                 caption=item.get("caption", ""))
     wait_ready(container)
     return api("POST", f"{IG_ID}/media_publish", creation_id=container)["id"]
 

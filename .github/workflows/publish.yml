@@ -3,7 +3,9 @@ name: publish
 on:
   schedule:
     # Moscow 09:00-11:00 window (morning posts) and 18:00-20:00 (evening 19:00)
-    - cron: '*/15 6-7,15-17 * * *'
+    # wide windows: GitHub cron often delays/skips 1-2h, so start early and
+    # overshoot; ig_publish.py only posts due+non-stale items, extra runs are no-ops
+    - cron: '*/15 5-8,13-18 * * *'
   workflow_dispatch:
 
 concurrency:

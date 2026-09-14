@@ -77,6 +77,24 @@ def raw_url(repo_path: str) -> str:
     return RAW + urllib.parse.quote(repo_path)
 
 
+def already_published(item: dict) -> str | None:
+    """Media id of a recent post with the same caption, if one exists.
+
+    Two runs can overlap (a manual dispatch landing on top of a scheduled
+    run): both check out the queue before either commits posted=true, and
+    the post went out twice on 13.09.2026. The queue file cannot be trusted
+    across overlapping runs, so ask Instagram itself.
+    """
+    caption = (item.get("caption") or "").strip()
+    if not caption:
+        return None
+    recent = api("GET", f"{IG_ID}/media", fields="id,caption,timestamp", limit=10)
+    for m in recent.get("data", []):
+        if (m.get("caption") or "").strip()[:200] == caption[:200]:
+            return m["id"]
+    return None
+
+
 def publish_reel(item: dict) -> str:
     container = create_container(media_type="REELS",
                                  video_url=raw_url(item["file"]),
@@ -116,6 +134,15 @@ def main():
             continue
         if now - when > timedelta(hours=STALE_HOURS):
             print(f"skip stale: {item['when']} ({item['type']})")
+            continue
+        existing = already_published(item)
+        if existing:
+            print(f"already on Instagram: {item['when']} ({item['type']}) "
+                  f"media_id={existing} - marking posted, not publishing again")
+            item["posted"] = True
+            item["media_id"] = existing
+            QUEUE.write_text(json.dumps(queue, ensure_ascii=False, indent=2),
+                             encoding="utf-8")
             continue
         print(f"publishing {item['type']} scheduled {item['when']} ...")
         if item["type"] == "reel":

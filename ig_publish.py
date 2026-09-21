@@ -11,6 +11,9 @@ Queue item format (times are Moscow local, same as tg-queue.json):
     { "when": "2026-08-10T19:00", "type": "carousel",
       "files": ["media/2026-08-10-goroskop/01.png", ...], "caption": "..." }
 
+Optional "first_comment": text posted as the author's comment right after
+publishing (pinning stays manual - the API cannot pin).
+
 An item is published when its time has come but no more than
 STALE_HOURS ago (so a dead token can't cause a flood of ancient posts
 once fixed). Published items get posted=true + media_id.
@@ -118,6 +121,27 @@ def publish_carousel(item: dict) -> str:
     return api("POST", f"{IG_ID}/media_publish", creation_id=container)["id"]
 
 
+def post_first_comment(item: dict, queue: list):
+    """Author's first comment under a fresh post (item["first_comment"]).
+
+    Needs the instagram_business_manage_comments permission on the token;
+    without it the post stays published and only the comment is skipped.
+    Pinning is not available through the API, so it stays a manual step.
+    """
+    text = (item.get("first_comment") or "").strip()
+    if not text or item.get("comment_id"):
+        return
+    try:
+        cid = api("POST", f"{item['media_id']}/comments", message=text)["id"]
+    except RuntimeError as e:
+        print(f"  first comment skipped: {e}")
+        return
+    item["comment_id"] = cid
+    QUEUE.write_text(json.dumps(queue, ensure_ascii=False, indent=2),
+                     encoding="utf-8")
+    print(f"  first comment posted, comment_id={cid}")
+
+
 def main():
     if not TOKEN or not IG_ID:
         print("IG_ACCESS_TOKEN / IG_USER_ID secrets not configured yet - "
@@ -157,6 +181,7 @@ def main():
                          encoding="utf-8")
         published += 1
         print(f"  published, media_id={media_id}")
+        post_first_comment(item, queue)
     print(f"done: {published} published")
 
 

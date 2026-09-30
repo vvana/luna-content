@@ -11,6 +11,7 @@ Queue item format (times are Moscow local, same as tg-queue.json):
     { "when": "2026-08-10T19:00", "type": "carousel",
       "files": ["media/2026-08-10-goroskop/01.png", ...], "caption": "..." }
 
+Optional "cover": repo path of a JPEG used as the reel cover (or "thumb_offset", ms).
 Optional "first_comment": text posted as the author's comment right after
 publishing (pinning stays manual - the API cannot pin).
 
@@ -99,10 +100,15 @@ def already_published(item: dict) -> str | None:
 
 
 def publish_reel(item: dict) -> str:
+    extra = {}
+    if item.get("cover"):                                  # обложка ролика: картинка из репозитория
+        extra["cover_url"] = raw_url(item["cover"])
+    elif item.get("thumb_offset") is not None:             # или кадр видео, мс от начала
+        extra["thumb_offset"] = str(int(item["thumb_offset"]))
     container = create_container(media_type="REELS",
                                  video_url=raw_url(item["file"]),
                                  caption=item.get("caption", ""),
-                                 share_to_feed="true")
+                                 share_to_feed="true", **extra)
     wait_ready(container)
     return api("POST", f"{IG_ID}/media_publish", creation_id=container)["id"]
 
